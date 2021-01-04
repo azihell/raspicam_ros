@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+#To run: ./raspicam.py /home/ubuntu/catkin_ws/src/raspicam_ros/config/raspicam.yaml
 
 import rospy, cv2, time, yaml, argparse
 import numpy as np
@@ -13,15 +16,15 @@ from cv_bridge import CvBridge, CvBridgeError
 """
 
 class TurtleVision:
- 
+
   def __init__(self):
 
     # Instantiates a publishing object and sets the published topic name
     self.image_pub = rospy.Publisher('raspicam/image', Image, queue_size=10)
     self.info_pub = rospy.Publisher('raspicam/camera_info', CameraInfo, queue_size=10)
-
-    # Initialize the class related node
-    rospy.init_node('turtle_sight', anonymous=True)
+ 
+    # Instantiates OpenCV bridge between ROS' and OpenCV's image format
+    self.bridge = CvBridge()
 
   # Obtains the camera_info parameters to be published from a .yaml file
   def yaml_to_CameraInfo(self,yaml_fname):
@@ -52,12 +55,13 @@ class TurtleVision:
     return camera_info_msg
 
   # Publishes a camera_info topic based on a loaded .yaml file.
-  def pub_camera_info(self):
-    arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument('filename', help='Path to yaml file containing ' +\
-                                            'camera calibration data')
-    args = arg_parser.parse_args()
-    filename = args.filename
+  def pub_camera_info(self, event=None):
+    # arg_parser = argparse.ArgumentParser()
+    # arg_parser.add_argument('filename', help='Path to yaml file containing ' +\
+    #                                         'camera calibration data')
+    # args = arg_parser.parse_args()
+    # filename = args.filename
+    filename = "/home/ubuntu/catkin_ws/src/raspicam_ros/config/raspicam.yaml"
 
     # Parse yaml file
     camera_info_msg = self.yaml_to_CameraInfo(filename)
@@ -68,41 +72,43 @@ class TurtleVision:
 
 
   # Publishes acquired images from the RaspiCam
-  def pub_raspicam(self):
-
-    # Instantiates OpenCV bridge between ROS' and OpenCV's image format
-    bridge = CvBridge()
-
+  def pub_raspicam(self, Event=None):
+    
     # Open the video capture
-    cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
+    vidcap = cv2.VideoCapture(0, cv2.CAP_V4L2)
 
     # Width and height capture size (in pixels)
-    cap.set(3, 320)
-    cap.set(4, 240)
-    
+    vidcap.set(3, 320)
+    vidcap.set(4, 240)
+    # fps = vidcap.get(5)
+    vidrate=rospy.Rate(20)
+
     # Reads the frames capture
-    (ret, cv2_frame) = cap.read()
-    """ TENTAR TORNAR AS IMAGENS P&B """
+    while (vidcap.isOpened()):
+      rospy.loginfo_once('Image message is being published under /raspicam/image')
 
-    # Converter a img cv2 em img ROS
-    ros_frame = bridge.cv2_to_imgmsg(cv2_frame, 'bgr8')
+      (ret, cv2_frame) = vidcap.read()
+      cv2_frame = cv2.cvtColor(cv2_frame, cv2.COLOR_BGR2GRAY)
 
-    # Publishes the image
-    self.image_pub.publish(ros_frame)
-    rospy.loginfo_once('Image message is being published under /raspicam/image')
+      # Converts the OpenCV image into a ROS image
+      ros_frame = self.bridge.cv2_to_imgmsg(cv2_frame, 'mono8')
 
-  def run(self):
-    self.pub_raspicam()
-    self.pub_camera_info()
+      # Publishes the image
+      self.image_pub.publish(ros_frame)
+      vidrate.sleep()
 
-# Funcao main
+# Main function
 if __name__ == '__main__':
+
+  # Initialize the class related node
+  rospy.init_node('turtle_sight')
+
   # Instantiate class
   sight = TurtleVision()
 
-  # Run publisher
-  try:
-    while not rospy.is_shutdown():
-      sight.run()
-  except rospy.ROSInterruptException:
-    rospy.is_shutdown()
+  # Sets different rates for each publisher from the node
+  rospy.Timer(rospy.Duration(1.0/20.0), sight.pub_camera_info)
+  rospy.Timer(rospy.Duration(1.0/20.0), sight.pub_raspicam)
+  
+  # Keep node running
+  rospy.spin()
