@@ -45,6 +45,7 @@ class TurtleVision:
       calib_data = yaml.load(file_handle, Loader=yaml.FullLoader)
     # Parse
     camera_info_msg = CameraInfo()
+    camera_info_msg.header.frame_id= calib_data["camera_name"]
     camera_info_msg.width = calib_data["image_width"]
     camera_info_msg.height = calib_data["image_height"]
     camera_info_msg.K = calib_data["camera_matrix"]["data"]
@@ -61,7 +62,7 @@ class TurtleVision:
     #                                         'camera calibration data')
     # args = arg_parser.parse_args()
     # filename = args.filename
-    filename = "/home/ubuntu/catkin_ws/src/raspicam_ros/config/raspicam.yaml"
+    filename = "/home/ubuntu/catkin_ws/src/raspicam_ros/config/raspicamlib.yaml"
 
     # Parse yaml file
     camera_info_msg = self.yaml_to_CameraInfo(filename)
@@ -77,9 +78,12 @@ class TurtleVision:
     vidcap = cv2.VideoCapture(0, cv2.CAP_V4L2)
 
     # Width and height capture size (in pixels)
-    vidcap.set(3, 320)
-    vidcap.set(4, 240)
-    # fps = vidcap.get(5)
+    vidcap.set(3, 480)
+    vidcap.set(4, 320)
+    fps = vidcap.get(5)
+    width = vidcap.get(3)
+    height = vidcap.get(4)
+    rospy.loginfo_once("Framerate: %s ; Width: %s ; Height: %s", fps, width, height)
     vidrate=rospy.Rate(20)
 
     # Reads the frames capture
@@ -87,14 +91,15 @@ class TurtleVision:
       rospy.loginfo_once('Image message is being published under /raspicam/image')
 
       (ret, cv2_frame) = vidcap.read()
-      cv2_frame = cv2.cvtColor(cv2_frame, cv2.COLOR_BGR2GRAY)
+      # cv2_frame = cv2.cvtColor(cv2_frame, cv2.COLOR_BGR2GRAY)
 
       # Converts the OpenCV image into a ROS image
-      ros_frame = self.bridge.cv2_to_imgmsg(cv2_frame, 'mono8')
+      ros_frame = self.bridge.cv2_to_imgmsg(cv2_frame, 'bgr8')
 
       # Publishes the image
       self.image_pub.publish(ros_frame)
       vidrate.sleep()
+    vidcap.release()
 
 # Main function
 if __name__ == '__main__':
@@ -106,7 +111,7 @@ if __name__ == '__main__':
   sight = TurtleVision()
 
   # Sets different rates for each publisher from the node
-  rospy.Timer(rospy.Duration(1.0/20.0), sight.pub_camera_info)
+  rospy.Timer(rospy.Duration(1.0/30.0), sight.pub_camera_info)
   rospy.Timer(rospy.Duration(1.0/20.0), sight.pub_raspicam)
   
   # Keep node running
